@@ -1,0 +1,189 @@
+basePath: /
+definitions:
+  handlers.Song:
+    properties:
+      group:
+        type: string
+      id:
+        type: integer
+      release_date:
+        type: string
+      song:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: API для управления библиотекой песен
+  title: Music Library API
+  version: "1.0"
+paths:
+  /songs:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает список песен с фильтрацией по группе и названию песни,
+        а также поддержкой пагинации.
+      parameters:
+      - default: ""
+        description: Название группы
+        in: query
+        name: group
+        type: string
+      - default: ""
+        description: Название песни
+        in: query
+        name: song
+        type: string
+      - default: 1
+        description: Номер страницы
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Количество элементов на странице
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Список песен
+          schema:
+            items:
+              $ref: '#/definitions/handlers.Song'
+            type: array
+        "400":
+          description: Некорректные параметры запроса
+          schema:
+            type: string
+        "500":
+          description: Ошибка сервера
+          schema:
+            type: string
+      summary: Получить список песен
+      tags:
+      - Songs
+  /songs/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Удаляет песню из библиотеки по ID.
+      parameters:
+      - description: ID песни
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: Песня успешно удалена
+          schema:
+            type: string
+        "400":
+          description: Некорректный ID
+          schema:
+            type: string
+        "500":
+          description: Ошибка удаления песни
+          schema:
+            type: string
+      summary: Удалить песню
+      tags:
+      - Songs
+    get:
+      consumes:
+      - application/json
+      description: Возвращает текст песни построчно.
+      parameters:
+      - description: ID песни
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Текст песни
+          schema:
+            type: string
+        "400":
+          description: Некорректный ID
+          schema:
+            type: string
+        "500":
+          description: Ошибка получения текста песни
+          schema:
+            type: string
+      summary: Получить текст песни
+      tags:
+      - Songs
+    put:
+      consumes:
+      - application/json
+      description: Обновляет данные песни по её ID.
+      parameters:
+      - description: ID песни
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Обновляемые данные песни
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.Song'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Песня успешно обновлена
+          schema:
+            type: string
+        "400":
+          description: Некорректный ID или формат данных
+          schema:
+            type: string
+        "500":
+          description: Ошибка обновления песни
+          schema:
+            type: string
+      summary: Обновить песню
+      tags:
+      - Songs
+  /songs/add:
+    post:
+      consumes:
+      - application/json
+      description: Добавляет новую песню, используя данные внешнего API.
+      parameters:
+      - description: Данные песни
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.Song'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Песня успешно добавлена
+          schema:
+            type: string
+        "400":
+          description: Некорректные входные данные
+          schema:
+            type: string
+        "500":
+          description: Ошибка добавления песни
+          schema:
+            type: string
+      summary: Добавить песню через API
+      tags:
+      - Songs
+swagger: "2.0"
