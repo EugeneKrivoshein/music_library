@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/EugeneKrivoshein/music_library/config"
 	"github.com/EugeneKrivoshein/music_library/internal/db/conn"
 	"github.com/EugeneKrivoshein/music_library/internal/utils"
 	"github.com/sirupsen/logrus"
@@ -11,10 +12,14 @@ import (
 
 type SongService struct {
 	dbProvider *conn.PostgresProvider
+	APIURL     string
 }
 
-func NewSongService(provider *conn.PostgresProvider) *SongService {
-	return &SongService{dbProvider: provider}
+func NewSongService(provider *conn.PostgresProvider, config *config.Config) *SongService {
+	return &SongService{
+		dbProvider: provider,
+		APIURL:     config.APIURL,
+	}
 }
 
 var log = logrus.New()
@@ -96,9 +101,8 @@ func (s *SongService) UpdateSong(id int, group, song string, releaseDate *string
 	return nil
 }
 
-func (s *SongService) AddSongWithAPI(group, song string) error {
-	apiURL := "https://api.com"
-	details, err := utils.FetchSongDetails(apiURL, group, song)
+func (s *SongService) AddSongWithAPI(config *config.Config, group, song string) error {
+	details, err := utils.FetchSongDetails(config, group, song)
 	if err != nil {
 		log.Errorf("Ошибка вызова внешнего API: %v", err)
 		return fmt.Errorf("ошибка вызова внешнего API: %w", err)
@@ -114,6 +118,7 @@ func (s *SongService) AddSongWithAPI(group, song string) error {
 		log.Errorf("Ошибка сохранения песни в базу: %v", err)
 		return fmt.Errorf("ошибка сохранения песни: %w", err)
 	}
+
 	log.Infof("Песня %s - %s успешно добавлена", group, song)
 	return nil
 }

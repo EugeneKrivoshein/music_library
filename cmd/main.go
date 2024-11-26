@@ -49,9 +49,9 @@ func main() {
 	}
 	log.Info("Миграции успешно выполнены")
 
-	songService := services.NewSongService(connect)
+	songService := services.NewSongService(connect, cfg)
 
-	songHandler := handlers.NewSongHandler(connect, songService)
+	songHandler := handlers.NewSongHandler(connect, songService, cfg)
 
 	// Создаем маршруты для API
 	router := api.NewRouter(songHandler, connect)

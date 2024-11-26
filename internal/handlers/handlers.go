@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/EugeneKrivoshein/music_library/config"
 	"github.com/EugeneKrivoshein/music_library/internal/db/conn"
 	"github.com/EugeneKrivoshein/music_library/internal/services"
 	"github.com/gorilla/mux"
@@ -20,12 +21,14 @@ type Song struct {
 type SongHandler struct {
 	SongService *services.SongService
 	dbProvider  *conn.PostgresProvider
+	Config      *config.Config
 }
 
-func NewSongHandler(provider *conn.PostgresProvider, service *services.SongService) *SongHandler {
+func NewSongHandler(provider *conn.PostgresProvider, service *services.SongService, cfg *config.Config) *SongHandler {
 	return &SongHandler{
 		dbProvider:  provider,
 		SongService: service,
+		Config:      cfg,
 	}
 }
 
@@ -117,7 +120,7 @@ func (h *SongHandler) AddSongWithAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.SongService.AddSongWithAPI(input.Group, input.Song); err != nil {
+	if err := h.SongService.AddSongWithAPI(h.Config, input.Group, input.Song); err != nil {
 		http.Error(w, "Ошибка добавления песни: "+err.Error(), http.StatusInternalServerError)
 		return
 	}

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+
+	"github.com/EugeneKrivoshein/music_library/config"
 )
 
 type SongDetail struct {
@@ -15,7 +17,8 @@ type SongDetail struct {
 }
 
 // FetchSongDetails делает запрос к внешнему API и возвращает информацию о песне.
-func FetchSongDetails(apiURL, group, song string) (*SongDetail, error) {
+func FetchSongDetails(config *config.Config, group, song string) (*SongDetail, error) {
+	apiURL := config.APIURL
 	params := url.Values{}
 	params.Add("group", group)
 	params.Add("song", song)
