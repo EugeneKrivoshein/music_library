@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/EugeneKrivoshein/music_library/config"
 	"github.com/EugeneKrivoshein/music_library/internal/db/conn"
@@ -13,9 +15,11 @@ import (
 
 type Song struct {
 	ID          int    `json:"id"`
-	Group       string `json:"group"`
-	Song        string `json:"song"`
-	ReleaseDate string `json:"release_date,omitempty"`
+	GroupName   string `json:"group_name"`
+	SongName    string `json:"song_name"`
+	ReleaseDate string `json:"release_date"`
+	Text        string `json:"text"`
+	Link        string `json:"link"`
 }
 
 type SongHandler struct {
@@ -47,27 +51,70 @@ func NewSongHandler(provider *conn.PostgresProvider, service *services.SongServi
 // @Failure 500 {string} string "Ошибка сервера"
 // @Router /songs [get]
 func (h *SongHandler) GetSongs(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
-	group := query.Get("group")
-	song := query.Get("song")
-	page, _ := strconv.Atoi(query.Get("page"))
-	if page <= 0 {
-		page = 1
+	// Извлекаем параметры из запроса
+	group := r.URL.Query().Get("group")
+	song := r.URL.Query().Get("song")
+	pageStr := r.URL.Query().Get("page")
+	limitStr := r.URL.Query().Get("limit")
+
+	// Преобразуем параметры страницы и лимита
+	page, err := strconv.Atoi(pageStr)
+	if err != nil || page <= 0 {
+		page = 1 // если страница некорректна, то начинаем с первой
 	}
 
-	limit, _ := strconv.Atoi(query.Get("limit"))
-	if limit <= 0 {
-		limit = 10
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		limit = 10 // если лимит некорректен, то устанавливаем значение по умолчанию
 	}
 
+	// Получаем список песен через сервис
 	songs, err := h.SongService.GetSongs(group, song, page, limit)
 	if err != nil {
 		http.Error(w, "Ошибка получения песен: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	// Преобразуем данные в нужный формат
+	var response []map[string]interface{}
+	for _, songData := range songs {
+		// Извлекаем нужные поля из карты
+		text, ok := songData["text"].(string) // здесь мы предполагаем, что поле text будет в карте
+		if !ok {
+			text = "" // если текст не найден, оставляем пустым
+		}
+
+		// Разделяем текст песни на куплеты, если текст существует
+		verses := []string{}
+		if text != "" {
+			verses = strings.Split(text, "\n")
+		}
+
+		// Пагинация по куплетам: определяем куплеты для текущей страницы
+		startIndex := (page - 1) * limit
+		endIndex := startIndex + limit
+
+		// Проверяем, что индексы не выходят за пределы массива куплетов
+		if startIndex > len(verses) {
+			verses = []string{} // Если страницы не существует, возвращаем пустой список
+		} else if endIndex > len(verses) {
+			verses = verses[startIndex:] // Если конец выходит за пределы, берем только оставшиеся куплеты
+		} else {
+			verses = verses[startIndex:endIndex]
+		}
+
+		// Обновляем текст песни для текущей страницы (по куплетам)
+		songData["text"] = strings.Join(verses, "\n")
+
+		// Добавляем песню в ответ
+		response = append(response, songData)
+	}
+
+	// Отправляем JSON-ответ
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(songs)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "Ошибка кодирования ответа: "+err.Error(), http.StatusInternalServerError)
+	}
 }
 
 // GetSongText godoc
@@ -159,6 +206,24 @@ func (h *SongHandler) UpdateSong(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		http.Error(w, "Некорректный формат данных", http.StatusBadRequest)
 		return
+	}
+
+	// Валидация полей, которые не могут быть пустыми
+	if input.Group == "" {
+		http.Error(w, "Группа не может быть пустой", http.StatusBadRequest)
+		return
+	}
+	if input.Song == "" {
+		http.Error(w, "Название песни не может быть пустым", http.StatusBadRequest)
+		return
+	}
+
+	// Проверяем правильность формата даты, если она передана
+	if input.ReleaseDate != nil {
+		if _, err := time.Parse("2006-01-02", *input.ReleaseDate); err != nil {
+			http.Error(w, "Некорректный формат даты", http.StatusBadRequest)
+			return
+		}
 	}
 
 	if err := h.SongService.UpdateSong(id, input.Group, input.Song, input.ReleaseDate, input.Text, input.Link); err != nil {

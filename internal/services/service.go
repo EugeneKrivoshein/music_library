@@ -27,11 +27,12 @@ var log = logrus.New()
 func (s *SongService) GetSongs(group, song string, page, limit int) ([]map[string]interface{}, error) {
 	offset := (page - 1) * limit
 	query := `
-		SELECT id, group_name, song_name, release_date
-		FROM songs
-		WHERE ($1 = '' OR group_name ILIKE '%' || $1 || '%')
-		AND ($2 = '' OR song_name ILIKE '%' || $2 || '%')
-		ORDER BY id LIMIT $3 OFFSET $4`
+		SELECT s.id, g.group_name, s.song_name, s.release_date
+		FROM songs s
+		JOIN groups g ON s.group_id = g.id
+		WHERE ($1 = '' OR g.group_name ILIKE '%' || $1 || '%')
+		AND ($2 = '' OR s.song_name ILIKE '%' || $2 || '%')
+		ORDER BY s.id LIMIT $3 OFFSET $4`
 
 	db := s.dbProvider.DB()
 	rows, err := db.Query(query, group, song, limit, offset)
@@ -44,17 +45,17 @@ func (s *SongService) GetSongs(group, song string, page, limit int) ([]map[strin
 	songs := []map[string]interface{}{}
 	for rows.Next() {
 		var id int
-		var group, song string
+		var groupName, songName string
 		var releaseDate sql.NullString
-		if err := rows.Scan(&id, &group, &song, &releaseDate); err != nil {
+		if err := rows.Scan(&id, &groupName, &songName, &releaseDate); err != nil {
 			log.Errorf("Ошибка сканирования строки: %v", err)
 			return nil, err
 		}
 
 		songData := map[string]interface{}{
 			"id":           id,
-			"group":        group,
-			"song":         song,
+			"group":        groupName,
+			"song":         songName,
 			"release_date": releaseDate.String,
 		}
 		songs = append(songs, songData)
@@ -81,18 +82,37 @@ func (s *SongService) GetSongText(id int) (string, error) {
 }
 
 func (s *SongService) UpdateSong(id int, group, song string, releaseDate *string, text, link *string) error {
+	db := s.dbProvider.DB()
+
+	// Получаем group_id, если передано новое название группы
+	var groupID *int
+	if group != "" {
+		groupID = new(int)
+		err := db.QueryRow(`SELECT id FROM groups WHERE group_name = $1`, group).Scan(groupID)
+		if err == sql.ErrNoRows {
+			// Добавляем группу, если её нет
+			err = db.QueryRow(`INSERT INTO groups (group_name) VALUES ($1) RETURNING id`, group).Scan(groupID)
+			if err != nil {
+				log.Errorf("Ошибка добавления группы: %v", err)
+				return fmt.Errorf("ошибка добавления группы: %w", err)
+			}
+		} else if err != nil {
+			log.Errorf("Ошибка проверки группы: %v", err)
+			return fmt.Errorf("ошибка проверки группы: %w", err)
+		}
+	}
+
+	// Обновление песни
 	query := `
 		UPDATE songs
-		SET group_name = COALESCE(NULLIF($1, ''), group_name),
+		SET group_id = COALESCE($1, group_id),
 		    song_name = COALESCE(NULLIF($2, ''), song_name),
 		    release_date = COALESCE($3::DATE, release_date),
 		    text = COALESCE($4, text),
 		    link = COALESCE($5, link),
 		    updated_at = CURRENT_TIMESTAMP
 		WHERE id = $6`
-
-	db := s.dbProvider.DB()
-	_, err := db.Exec(query, group, song, releaseDate, text, link, id)
+	_, err := db.Exec(query, groupID, song, releaseDate, text, link, id)
 	if err != nil {
 		log.Errorf("Ошибка обновления песни с ID %d: %v", id, err)
 		return fmt.Errorf("ошибка обновления песни: %w", err)
@@ -102,18 +122,35 @@ func (s *SongService) UpdateSong(id int, group, song string, releaseDate *string
 }
 
 func (s *SongService) AddSongWithAPI(config *config.Config, group, song string) error {
+	db := s.dbProvider.DB()
+
+	// Проверка существования группы
+	var groupID int
+	err := db.QueryRow(`SELECT id FROM groups WHERE group_name = $1`, group).Scan(&groupID)
+	if err == sql.ErrNoRows {
+		// Группа не найдена, добавляем
+		err = db.QueryRow(`INSERT INTO groups (group_name) VALUES ($1) RETURNING id`, group).Scan(&groupID)
+		if err != nil {
+			log.Errorf("Ошибка добавления группы: %v", err)
+			return fmt.Errorf("ошибка добавления группы: %w", err)
+		}
+	} else if err != nil {
+		log.Errorf("Ошибка проверки группы: %v", err)
+		return fmt.Errorf("ошибка проверки группы: %w", err)
+	}
+
+	// Получение деталей песни из внешнего API
 	details, err := utils.FetchSongDetails(config, group, song)
 	if err != nil {
 		log.Errorf("Ошибка вызова внешнего API: %v", err)
 		return fmt.Errorf("ошибка вызова внешнего API: %w", err)
 	}
 
+	// Добавление песни
 	query := `
-		INSERT INTO songs (group_name, song_name, release_date, lyrics, link)
+		INSERT INTO songs (group_id, song_name, release_date, lyrics, link)
 		VALUES ($1, $2, $3, $4, $5)`
-
-	db := s.dbProvider.DB()
-	_, err = db.Exec(query, group, song, details.ReleaseDate, details.Text, details.Link)
+	_, err = db.Exec(query, groupID, song, details.ReleaseDate, details.Text, details.Link)
 	if err != nil {
 		log.Errorf("Ошибка сохранения песни в базу: %v", err)
 		return fmt.Errorf("ошибка сохранения песни: %w", err)

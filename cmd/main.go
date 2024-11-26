@@ -44,7 +44,7 @@ func main() {
 	log.Info("Подключение к базе данных успешно установлено")
 
 	log.Debug("Запуск миграций базы данных")
-	if err := migrations.RunMigrations(connect); err != nil {
+	if err := migrations.RunMigrations(connect, cfg.MigrationPass); err != nil {
 		log.Fatalf("Ошибка выполнения миграций: %v", err)
 	}
 	log.Info("Миграции успешно выполнены")

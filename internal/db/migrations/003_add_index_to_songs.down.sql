@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_songs_group_name;

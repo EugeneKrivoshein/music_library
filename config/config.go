@@ -16,6 +16,7 @@ type Config struct {
 	DBName        string
 	ServerAddress string
 	APIURL        string
+	MigrationPass string
 }
 
 // Функция загрузки конфигурации
@@ -32,5 +33,6 @@ func LoadConfig(envPath string) (*Config, error) {
 		DBPort:        os.Getenv("DB_PORT"),
 		ServerAddress: os.Getenv("SERVER_ADDRESS"),
 		APIURL:        os.Getenv("API_URL"),
+		MigrationPass: os.Getenv("MIGRATIONS_PATH"),
 	}, nil
 }
